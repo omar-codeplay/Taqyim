@@ -12,33 +12,40 @@ HISTORY_FILE = "moe_files_history.txt"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
 TELEGRAM_CHAT_ID = "@omar_codeplay" 
 
+# تصفية الملفات إلى 'تقييم' فقط
 TARGET_GRADE = "الصف الثاني الثانوي"
+TARGET_TYPE = "تقييم" 
+
+# الحد الأقصى للروابط في الرسالة الواحدة (لحل مشكلة "text is too long")
+CHUNK_SIZE = 25 
 # =================================================================
 
-
-def send_notification(content, is_status=False):
-    """يرسل تنبيه أو رسالة حالة إلى قناة/دردشة تيليجرام."""
+def send_notification_chunk(chunk_data, total_new_count, chunk_index, total_chunks, is_status=False):
+    """ترسل دفعة من الملفات الجديدة أو رسالة حالة واحدة."""
     if not TELEGRAM_BOT_TOKEN:
         print("❌ فشل الإرسال: TELEGRAM_BOT_TOKEN غير متوفر.")
-        return
+        return False
 
     message_text = ""
     if is_status:
-        message_text = content
+        message_text = chunk_data
     else:
         # بناء الرسالة باستخدام تنسيق HTML
-        message_text = f"🚨 <b>تنبيه: تم العثور على {len(content)} ملف جديد للصف الثاني الثانوي!</b> 🚨\n\n"
-        for item in content:
-            name = f"({item['type']}) {item['subject']} - {item['term']}"
-            link = item['link']
-            # استخدام تنسيق HTML للروابط: <a href="الرابط">الاسم</a>
-            message_text += f"▪️ <a href=\"{link}\">{name}</a>\n"
+        message_text = f"🚨 <b>تنبيه: تم العثور على {total_new_count} تقييماً جديداً للصف {TARGET_GRADE}!</b> 🚨\n"
+        if total_chunks > 1:
+            message_text += f"<i>(جزء {chunk_index} من {total_chunks})</i>\n\n"
+        
+        for item in chunk_data:
+            # صياغة اسم التقييم بدون الفصل الدراسي
+            name = f"({item['type']}) {item['subject']}" 
+            
+            # 🚨🚨 التعديل الحاسم: إرسال الاسم كنص عادي بدون رابط 🚨🚨
+            message_text += f"▪️ {name}\n"
 
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
         'text': message_text,
-        # 🚨 التعديل الحاسم: استخدام HTML بدلاً من Markdown 🚨
         'parse_mode': 'HTML', 
         'disable_web_page_preview': True
     }
@@ -47,15 +54,28 @@ def send_notification(content, is_status=False):
         response = requests.post(telegram_url, data=payload)
         if response.status_code != 200:
              print(f"❌ فشل في إرسال رسالة Telegram. رمز الحالة: {response.status_code}")
-             # طباعة محتوى الاستجابة لمزيد من التشخيص
              print(f"استجابة تيليجرام: {response.text}")
              return False
-
-        print("*** تم إرسال التنبيه إلى Telegram بنجاح! ***")
         return True
     except requests.exceptions.RequestException as e:
         print(f"❌ فشل في إرسال رسالة Telegram. الخطأ: {e}")
         return False
+
+
+def send_status_notification(message):
+    """ترسل رسالة حالة بسيطة."""
+    if not TELEGRAM_BOT_TOKEN: return
+    telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        'chat_id': TELEGRAM_CHAT_ID,
+        'text': message,
+        'parse_mode': 'HTML',
+        'disable_web_page_preview': True
+    }
+    try:
+        requests.post(telegram_url, data=payload)
+    except requests.exceptions.RequestException:
+        pass
 
 
 def load_history(filename):
@@ -71,9 +91,9 @@ def save_history(filename, links):
         for link in sorted(list(links)):
             f.write(f"{link}\n")
 
-def get_current_links_from_js(js_url, target_grade):
+def get_current_links_from_js(js_url, target_grade, target_type):
     """
-    يقوم بتنزيل ملف JS، يستخرج مصفوفة الكتب، ويقوم بالتصفية باستخدام ast.literal_eval.
+    يقوم بتنزيل ملف JS، يستخرج مصفوفة الكتب، ويقوم بالتصفية.
     """
     print(f"📥 جاري تنزيل ملف البيانات من: {js_url}")
     
@@ -86,47 +106,34 @@ def get_current_links_from_js(js_url, target_grade):
         response.raise_for_status()
         js_content = response.text
         
-        # 1. البحث عن مصفوفة الكتب في محتوى الملف
         match = re.search(r'const\s+books\s*=\s*(\[[^;]*?\]);', js_content, re.DOTALL)
-        
-        if not match:
-            print("❌ لم يتم العثور على متغير 'const books' في الملف.")
-            return []
+        if not match: return []
 
         js_data_text = match.group(1).strip()
         
-        # 2. تنظيف البيانات لـ ast.literal_eval
+        # تنظيف البيانات لـ ast.literal_eval
         js_data_text = js_data_text.replace('\n', '').replace('\t', '')
-        
-        # إزالة جميع علامات الاقتباس المزدوجة والمفردة أولاً
         js_data_text = js_data_text.replace('"', '').replace("'", "")
-        
-        # التأكد من اقتباس المفاتيح وقيمها باستخدام علامات اقتباس مفردة
         js_data_text = re.sub(r'([a-zA-Z0-9_]+)\s*:\s*([^,\[\]\{\}]+)', r"'\1': '\2'", js_data_text)
-        
-        # إزالة الفواصل الزائدة
         js_data_text = re.sub(r',\s*\]', ']', js_data_text)
         
-        # ----------------------------------------------------
-        
-        # 3. التحليل باستخدام ast.literal_eval
         books_data = ast.literal_eval(js_data_text) 
         
-        # 4. التصفية
+        # التصفية للوصول إلى الصف والنوع المطلوبين
         filtered_data = [
             book for book in books_data 
-            if book.get('grade') == target_grade
+            if book.get('grade') == target_grade and book.get('type') == target_type
         ]
         
-        print(f"✅ تم استخراج {len(filtered_data)} ملفاً للصف {target_grade}.")
+        print(f"✅ تم استخراج {len(filtered_data)} تقييماً للصف {target_grade}.")
         return filtered_data
 
     except requests.exceptions.RequestException as e:
         print(f"❌ فشل في تنزيل ملف JS. الخطأ: {e}")
         return []
         
-    except SyntaxError as e:
-        print(f"❌ فشل في تحليل بيانات JS/JSON: SyntaxError عند استخدام ast.literal_eval. الخطأ: {e}")
+    except (SyntaxError, ValueError) as e:
+        print(f"❌ فشل في تحليل بيانات JS/JSON: {e}")
         return []
     except Exception as e:
         print(f"❌ حدث خطأ غير متوقع: {e}")
@@ -136,29 +143,46 @@ def monitor_website():
     """المنطق الرئيسي لمقارنة الروابط وإرسال التنبيه."""
     print(f"جاري مراقبة: {URL_TO_MONITOR}")
 
-    structured_data = get_current_links_from_js(JS_FILE_URL, TARGET_GRADE)
+    structured_data = get_current_links_from_js(JS_FILE_URL, TARGET_GRADE, TARGET_TYPE)
 
     if not structured_data:
-        print("❌ فشل في الحصول على بيانات الملفات. يرجى مراجعة سجل GitHub.")
-        send_notification("❌ فشل البوت في الحصول على بيانات الصف الثاني الثانوي من ملف البيانات.", is_status=True)
+        print("❌ فشل في الحصول على بيانات التقييمات. يرجى مراجعة سجل GitHub.")
+        send_notification_chunk("❌ فشل البوت في الحصول على بيانات التقييمات للصف الثاني الثانوي.", 0, 0, 0, is_status=True)
         return
 
+    # ملاحظة: سنستمر في حفظ الروابط في السجل لتجنب تكرار الإشعارات،
+    # حتى لو لم يتم عرضها للمستخدم.
     current_links = {item['link'] for item in structured_data}
     old_links = load_history(HISTORY_FILE)
 
     new_links_urls = current_links - old_links
     
     new_data = [item for item in structured_data if item['link'] in new_links_urls]
-
+    
     if new_data:
-        print(f"⚠️ تم العثور على {len(new_data)} ملف جديد للصف الثاني الثانوي!")
-        send_notification(new_data)
+        total_new = len(new_data)
+        print(f"⚠️ تم العثور على {total_new} تقييماً جديداً للصف {TARGET_GRADE}!")
+        
+        # تقسيم الروابط إلى دفعات وإرسالها
+        chunks = [new_data[i:i + CHUNK_SIZE] for i in range(0, total_new, CHUNK_SIZE)]
+        total_chunks = len(chunks)
+        
+        print(f"جاري إرسال التنبيه في {total_chunks} رسالة.")
+        
+        for i, chunk in enumerate(chunks):
+            success = send_notification_chunk(chunk, total_new, i + 1, total_chunks)
+            if not success:
+                print(f"🛑 توقف الإرسال بعد فشل الدفعة {i+1}. لن يتم حفظ السجل.")
+                return 
+        
+        # حفظ السجل فقط بعد إرسال جميع الرسائل بنجاح
         save_history(HISTORY_FILE, current_links)
+        print("*** تم تحديث سجل الروابط بنجاح. ***")
+        
     else:
-        status_message = f"✅ *البوت يعمل بنجاح!* لا يوجد ملفات جديدة للصف الثاني الثانوي منذ الفحص الأخير."
+        status_message = f"✅ <b>البوت يعمل بنجاح!</b> لا يوجد تقييمات جديدة للصف {TARGET_GRADE} منذ الفحص الأخير."
         print(status_message)
-        # إرسال رسالة حالة واحدة فقط يومياً أو عند الفشل
-        # send_notification(status_message, is_status=True)
+        send_status_notification(status_message)
 
 
 if __name__ == "__main__":
