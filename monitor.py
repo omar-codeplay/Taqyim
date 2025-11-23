@@ -12,7 +12,7 @@ URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/"
 HISTORY_FILE = "moe_files_history.txt"
 # يجب إعداد هذا المتغير في إعدادات GitHub Secrets
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
-# يجب استبدال هذا بمعرّف قناتك/محادثتك
+# يجب استبدال هذا بمعرّف قناتك/محادثتك (بدون @)
 TELEGRAM_CHAT_ID = "@omar_codeplay" 
 
 # معايير التصفية
@@ -33,6 +33,7 @@ def send_notification(content, is_status=False):
         # بناء رسالة التنبيه بالملفات الجديدة (باستخدام الاسم والرابط)
         message_text = f"🚨 *تنبيه: تم العثور على {len(content)} ملف جديد للصف الثاني الثانوي!* 🚨\n\n"
         for item in content:
+            # دمج نوع التقييم والمادة والفصل الدراسي في اسم واحد واضح
             name = f"({item['type']}) {item['subject']} - {item['term']}"
             link = item['link']
             message_text += f"▪️ [{name}]({link})\n"
@@ -47,7 +48,11 @@ def send_notification(content, is_status=False):
 
     try:
         response = requests.post(telegram_url, data=payload)
-        response.raise_for_status()
+        # نستخدم status_code بدلاً من raise_for_status للتحكم في الأخطاء
+        if response.status_code != 200:
+             print(f"❌ فشل في إرسال رسالة Telegram. رمز الحالة: {response.status_code}")
+             return False
+
         print("*** تم إرسال التنبيه إلى Telegram بنجاح! ***")
         return True
     except requests.exceptions.RequestException as e:
@@ -73,9 +78,16 @@ def get_current_links_from_js(js_url, target_grade):
     يقوم بتنزيل ملف JS، يستخرج مصفوفة الكتب، ويقوم بالتصفية.
     """
     print(f"📥 جاري تنزيل ملف البيانات من: {js_url}")
+    
+    # إضافة هوية المتصفح لتجاوز خطأ 403 Forbidden
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36'
+    }
+
     try:
-        response = requests.get(js_url, timeout=15)
-        response.raise_for_status()
+        # استخدام Headers في طلب GET
+        response = requests.get(js_url, headers=headers, timeout=15) 
+        response.raise_for_status() # إثارة خطأ إذا كان رمز الحالة 4xx أو 5xx (بدون 403)
         js_content = response.text
         
         # 1. البحث عن مصفوفة الكتب في محتوى الملف
@@ -89,9 +101,8 @@ def get_current_links_from_js(js_url, target_grade):
         json_text = match.group(1).strip()
         
         # 2. تنظيف وتحويل النص إلى JSON (التعامل مع تنسيق JS)
-        # استبدال single quotes بـ double quotes إذا لزم الأمر، وإزالة النصوص غير اللازمة
+        # هذا الجزء يعالج تنسيق البيانات من كود JavaScript
         json_text = json_text.replace("'", '"').replace("subject:", '"subject":').replace("link:", '"link":') 
-        # حل مشكلة أسماء الخصائص التي تفتقد علامات التنصيص في كود JS
         json_text = re.sub(r'(\w+):', r'"\1":', json_text)
         
         # تحويل النص النظيف إلى قائمة من القواميس
@@ -112,7 +123,6 @@ def get_current_links_from_js(js_url, target_grade):
         
     except json.JSONDecodeError as e:
         print(f"❌ فشل في تحليل بيانات JSON: {e}")
-        print("قد يكون هناك تنسيق غير صحيح في ملف JS.")
         return []
     except Exception as e:
         print(f"❌ حدث خطأ غير متوقع: {e}")
@@ -126,7 +136,7 @@ def monitor_website():
     structured_data = get_current_links_from_js(JS_FILE_URL, TARGET_GRADE)
 
     if not structured_data:
-        print("❌ فشل في الحصول على بيانات الملفات. قد يكون هناك خطأ في الاتصال أو التنسيق.")
+        print("❌ فشل في الحصول على بيانات الملفات. يرجى مراجعة سجل GitHub.")
         send_notification("❌ فشل البوت في الحصول على بيانات الصف الثاني الثانوي من ملف البيانات.", is_status=True)
         return
 
