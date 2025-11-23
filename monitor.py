@@ -39,7 +39,7 @@ def send_notification_chunk(chunk_data, total_new_count, chunk_index, total_chun
             # صياغة اسم التقييم بدون الفصل الدراسي
             name = f"({item['type']}) {item['subject']}" 
             
-            # 🚨🚨 التعديل الحاسم: إرسال الاسم كنص عادي بدون رابط 🚨🚨
+            # إرسال الاسم كنص عادي بدون رابط
             message_text += f"▪️ {name}\n"
 
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -64,6 +64,7 @@ def send_notification_chunk(chunk_data, total_new_count, chunk_index, total_chun
 
 def send_status_notification(message):
     """ترسل رسالة حالة بسيطة."""
+    # (هذه الدالة لم تعد تُستخدم في حالة عدم وجود تغيير)
     if not TELEGRAM_BOT_TOKEN: return
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -150,8 +151,6 @@ def monitor_website():
         send_notification_chunk("❌ فشل البوت في الحصول على بيانات التقييمات للصف الثاني الثانوي.", 0, 0, 0, is_status=True)
         return
 
-    # ملاحظة: سنستمر في حفظ الروابط في السجل لتجنب تكرار الإشعارات،
-    # حتى لو لم يتم عرضها للمستخدم.
     current_links = {item['link'] for item in structured_data}
     old_links = load_history(HISTORY_FILE)
 
@@ -182,7 +181,7 @@ def monitor_website():
     else:
         status_message = f"✅ <b>البوت يعمل بنجاح!</b> لا يوجد تقييمات جديدة للصف {TARGET_GRADE} منذ الفحص الأخير."
         print(status_message)
-        send_status_notification(status_message)
+        # send_status_notification(status_message) # 🚨 تعطيل إرسال رسالة الحالة 🚨
 
 
 if __name__ == "__main__":
