@@ -1,0 +1,25 @@
+name: 📥 Telegram Listener - Run Scraper on Command
+
+on:
+  # هذا السيرك العمل يستمع للرسائل القادمة من البوت
+  # يجب أن يكون هذا السيرك العمل هو الوحيد الذي يستخدم هذا الأكشن
+  # ليتم تشغيله من رسالة تيليجرام.
+  telegram_action_dispatch:
+    types: [message]
+
+jobs:
+  run_on_telegram_command:
+    # الأكشن يعمل فقط إذا كانت الرسالة هي الأمر المحدد (مثلاً /run)
+    if: |
+      github.event.telegram_action_dispatch.type == 'message' && 
+      startsWith(github.event.telegram_action_dispatch.text, '/run')
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🚀 Dispatch Scraper Workflow
+        # هذا الأمر يطلب من GitHub تشغيل سير العمل monitor-moe-files-via-telegram.yml
+        # وهو ملفك الأصلي.
+        uses: peter-evans/workflow-dispatch@v2
+        with:
+          workflow: Monitor MOE Files via Telegram
+          token: ${{ secrets.GITHUB_TOKEN }}
