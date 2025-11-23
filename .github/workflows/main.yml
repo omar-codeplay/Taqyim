@@ -1,0 +1,36 @@
+name: Run Scraper
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    # سيتم التشغيل كل 6 ساعات (يمكنك تغيير الوقت)
+    - cron: '0 */6 * * *' 
+  workflow_dispatch:
+
+jobs:
+  run-python-script:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x' 
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Run Scraper Script
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      run: python monitor.py 
+
+    - name: Commit history file
+      uses: actions/upload-artifact@v4
+      with:
+        name: history
+        path: moe_files_history.txt
