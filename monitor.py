@@ -4,10 +4,15 @@ import os
 import urllib.parse
 import time
 
-# --- الإعدادات العامة ---
+# في ملف monitor.py
+
+# ... (الإعدادات العامة)
 URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/" 
 HISTORY_FILE = "moe_files_history.txt" 
-LINK_KEYWORD = "Secondary2" 
+# *** 🚨 الكلمة المفتاحية الجديدة 🚨 ***
+LINK_KEYWORD = "الصف الثاني الثانوي" 
+# ... (بقية الكود)
+
 
 # --- إعدادات Telegram (يتم قراءة التوكن من GitHub Secrets) ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
