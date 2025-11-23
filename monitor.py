@@ -1,81 +1,66 @@
 import requests
 from bs4 import BeautifulSoup
 import os
-import time # لإضافة تأخير بسيط
+import urllib.parse
+import time
 
-# --- الإعدادات (المعدلة) ---
+# --- الإعدادات العامة ---
 URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/" 
 HISTORY_FILE = "moe_files_history.txt" 
-# عادةً ما تكون الملفات الجديدة في هذا الموقع هي عبارة عن وسوم 'a'
-# داخل وسم يحتوي على فئة (class) معينة، لكن سنبحث عن الروابط العامة أولاً.
-# كلمة مفتاحية شائعة للروابط في هذا الموقع هي "download" أو "pdf"
+# الكلمة المفتاحية: جرب "pdf" أو "تحميل" أو "download". اختر الكلمة التي تميز ملفات الوزارة.
 LINK_KEYWORD = "pdf" 
 
-# أضف مكتبة urllib.parse لضمان تشفير الرسالة في الرابط
-import urllib.parse 
-# ... (باقي المكتبات: requests, BeautifulSoup, os, time) ...
-
-# --- الإعدادات (ستبقى نفسها) ---
-URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/" 
-HISTORY_FILE = "moe_files_history.txt" 
-LINK_KEYWORD = "pdf" 
-
-# --- إعدادات Telegram (مؤقتة) ---
-# ستستبدل هذه القيم بـ GitHub Secrets لاحقاً!
-TELEGRAM_BOT_TOKEN = "ضع_هنا_مفتاح_التوكن_الذي_أعطاك_إياه_BotFather" 
-TELEGRAM_CHAT_ID = "ضع_هنا_معرف_المحادثة_الذي_حصلت_عليه"
+# --- إعدادات Telegram (يتم قراءتها من GitHub Secrets) ---
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 def send_notification(new_links):
     """
-    الدالة الجديدة لإرسال التنبيهات إلى Telegram.
+    إرسال التنبيهات إلى Telegram باستخدام Requests.
     """
-    if not new_links:
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("\n❌ فشل الإرسال: لم يتم إعداد Telegram Secrets بشكل صحيح.")
         return
 
     notification_message = "🎉 *تم العثور على ملفات جديدة في موقع الوزارة!* 🎉\n"
     for link in new_links:
-        notification_message += f"• الرابط: {link}\n"
+        # تضمين اسم الملف في الرسالة
+        link_parts = link.split('/')
+        file_name = link_parts[-1] if link_parts[-1] else link_parts[-2]
+        notification_message += f"\n- *اسم الملف:* {file_name}\n- *الرابط:* {link}\n"
     
-    # 1. تشفير الرسالة لتكون صالحة للاستخدام في رابط URL
+    # تشفير الرسالة لتكون صالحة للاستخدام في رابط URL
     encoded_message = urllib.parse.quote_plus(notification_message)
     
-    # 2. بناء رابط API لإرسال الرسالة
+    # بناء رابط API
     api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage?chat_id={TELEGRAM_CHAT_ID}&text={encoded_message}&parse_mode=Markdown"
     
     try:
-        # 3. إرسال الطلب
-        response = requests.get(api_url)
+        # إرسال الطلب
+        response = requests.get(api_url, timeout=10)
         response.raise_for_status()
         print("\n*** تم إرسال التنبيه إلى Telegram بنجاح! ***")
     except requests.exceptions.RequestException as e:
-        print(f"\n❌ فشل في إرسال رسالة Telegram: {e}")
-        print("تأكد من صحة التوكن و Chat ID.")
-
-# ... (باقي الدوال: get_current_links, load_history, save_history, monitor_website) ...
-# ... (لا تحتاج لتغييرها) ...
+        print(f"\n❌ فشل في إرسال رسالة Telegram. الخطأ: {e}")
 
 
 def get_current_links(url):
     """يزور الصفحة ويستخرج الروابط التي تطابق الكلمة المفتاحية."""
-    # لتجنب حظر الخادم، أرسل user-agent كمتصفح حقيقي
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
     
     try:
         response = requests.get(url, headers=headers, timeout=15)
-        response.raise_for_status() # التأكد من نجاح الاتصال (كود 200)
+        response.raise_for_status()
 
         soup = BeautifulSoup(response.content, 'html.parser')
         current_links = set()
         
-        # البحث عن كل الروابط (<a>) التي تحتوي على خاصية href
         for link in soup.find_all('a', href=True):
             href = link['href']
             
-            # تحقق من الكلمة المفتاحية في الرابط
             if LINK_KEYWORD.lower() in href.lower():
-                # تحويل الروابط النسبية إلى كاملة
                 full_link = requests.compat.urljoin(url, href)
                 current_links.add(full_link)
                 
@@ -85,8 +70,6 @@ def get_current_links(url):
         print(f"❌ حدث خطأ في الاتصال أو التحليل: {e}")
         return set()
 
-# (دالتا load_history و save_history من الكود السابق تعملان كما هما)
-# ... [Code for load_history and save_history functions] ...
 def load_history(filename):
     """تحميل الروابط القديمة المحفوظة من الملف."""
     if not os.path.exists(filename):
@@ -106,31 +89,27 @@ def save_history(filename, links):
                 f.write(link + '\n')
     except IOError as e:
         print(f"حدث خطأ أثناء حفظ ملف السجل: {e}")
-# --------------------------------------------------------
 
 def monitor_website():
     """الدالة الرئيسية لمراقبة الموقع."""
     print(f"جاري مراقبة: {URL_TO_MONITOR}")
     
-    # 1. تحميل الروابط القديمة
     old_links = load_history(HISTORY_FILE)
-
-    # 2. استخراج الروابط الحالية
     current_links = get_current_links(URL_TO_MONITOR)
 
     if not current_links and not old_links:
-        print("لم يتم العثور على أي روابط حالياً. ربما تحتاج لتعديل LINK_KEYWORD.")
+        print("لم يتم العثور على أي روابط حالياً. تحقق من LINK_KEYWORD.")
         return
 
-    # 3. مقارنة القوائم
     new_links = current_links - old_links
 
     if new_links:
+        print(f"⚠️ تم العثور على {len(new_links)} ملف جديد!")
         send_notification(new_links)
     else:
         print("✅ لا يوجد ملفات جديدة تم العثور عليها منذ الفحص الأخير.")
 
-    # 4. حفظ القائمة الحالية للمقارنة التالية
+    # حفظ القائمة الحالية للمقارنة التالية
     if current_links:
         save_history(HISTORY_FILE, current_links)
         print("تم تحديث سجل الروابط بنجاح.")
