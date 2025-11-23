@@ -5,9 +5,15 @@ import urllib.parse
 import time
 
 # --- الإعدادات العامة (يجب التأكد منها) ---
+# في ملف monitor.py
+
+# ... (الإعدادات العامة)
 URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/" 
 HISTORY_FILE = "moe_files_history.txt" 
-LINK_KEYWORD = "pdf" # الكلمة المفتاحية للبحث عن الملفات (يمكن تغييرها)
+# *** 🚨 غيّر هذه القيمة الآن 🚨 ***
+LINK_KEYWORD = "Secondary2" 
+# ... (بقية الكود)
+
 
 # --- إعدادات Telegram (يتم قراءة التوكن من GitHub Secrets) ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
