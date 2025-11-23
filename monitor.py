@@ -10,9 +10,7 @@ JS_FILE_URL = "https://ellibrary.moe.gov.eg/cha/scripts.js"
 URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/" 
 
 HISTORY_FILE = "moe_files_history.txt"
-# يجب إعداد هذا المتغير في إعدادات GitHub Secrets
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
-# يجب استبدال هذا بمعرّف قناتك/محادثتك (بدون @)
 TELEGRAM_CHAT_ID = "@omar_codeplay" 
 
 # معايير التصفية
@@ -30,10 +28,9 @@ def send_notification(content, is_status=False):
     if is_status:
         message_text = content
     else:
-        # بناء رسالة التنبيه بالملفات الجديدة (باستخدام الاسم والرابط)
+        # بناء رسالة التنبيه بالملفات الجديدة
         message_text = f"🚨 *تنبيه: تم العثور على {len(content)} ملف جديد للصف الثاني الثانوي!* 🚨\n\n"
         for item in content:
-            # دمج نوع التقييم والمادة والفصل الدراسي في اسم واحد واضح
             name = f"({item['type']}) {item['subject']} - {item['term']}"
             link = item['link']
             message_text += f"▪️ [{name}]({link})\n"
@@ -48,7 +45,6 @@ def send_notification(content, is_status=False):
 
     try:
         response = requests.post(telegram_url, data=payload)
-        # نستخدم status_code بدلاً من raise_for_status للتحكم في الأخطاء
         if response.status_code != 200:
              print(f"❌ فشل في إرسال رسالة Telegram. رمز الحالة: {response.status_code}")
              return False
@@ -79,15 +75,13 @@ def get_current_links_from_js(js_url, target_grade):
     """
     print(f"📥 جاري تنزيل ملف البيانات من: {js_url}")
     
-    # إضافة هوية المتصفح لتجاوز خطأ 403 Forbidden
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36'
     }
 
     try:
-        # استخدام Headers في طلب GET
         response = requests.get(js_url, headers=headers, timeout=15) 
-        response.raise_for_status() # إثارة خطأ إذا كان رمز الحالة 4xx أو 5xx (بدون 403)
+        response.raise_for_status()
         js_content = response.text
         
         # 1. البحث عن مصفوفة الكتب في محتوى الملف
@@ -97,18 +91,33 @@ def get_current_links_from_js(js_url, target_grade):
             print("❌ لم يتم العثور على متغير 'const books' في الملف.")
             return []
 
-        # استخراج النص الذي يمثل المصفوفة (ويشمل القوسين المربعين)
         json_text = match.group(1).strip()
         
-        # 2. تنظيف وتحويل النص إلى JSON (التعامل مع تنسيق JS)
-        # هذا الجزء يعالج تنسيق البيانات من كود JavaScript
-        json_text = json_text.replace("'", '"').replace("subject:", '"subject":').replace("link:", '"link":') 
-        json_text = re.sub(r'(\w+):', r'"\1":', json_text)
+        # 2. 🚨🚨 التعديل الحاسم لتنظيف البيانات 🚨🚨
         
-        # تحويل النص النظيف إلى قائمة من القواميس
+        # أ. إزالة أي مسافات زائدة وعلامات سطر جديدة
+        json_text = json_text.replace('\n', '').replace('\t', '')
+        # ب. استبدال الكلمات العربية المكتوبة في الكود (التي يجب أن تكون مُقتبسة) بعلامات اقتباس مزدوجة
+        json_text = re.sub(r'(\w+):\s*"([^"]*)"', r'"\1": "\2"', json_text)
+        
+        # ج. التأكد من اقتباس المفاتيح (مثل: stage, grade) التي لم يتم اقتباسها في JS
+        json_text = re.sub(r'([a-zA-Z0-9_]+)\s*:', r'"\1":', json_text)
+        
+        # د. اقتباس القيم العربية المفقودة في الكود المصدري الأصلي
+        json_text = re.sub(r'([a-zA-Z0-9_]+)\s*:\s*([^,\]\}]+)', r'"\1": "\2"', json_text)
+        
+        # هـ. استبدال علامات الاقتباس الفردية (إذا وجدت) بالزوجية
+        json_text = json_text.replace("'", '"')
+        
+        # و. إزالة الفواصل في نهاية المصفوفة (والتي تسبب خطأ JSON)
+        json_text = re.sub(r',\s*\]', ']', json_text)
+        
+        # ----------------------------------------------------
+        
+        # 3. تحويل النص النظيف إلى قائمة من القواميس
         books_data = json.loads(json_text)
         
-        # 3. التصفية للحصول على الصف المطلوب
+        # 4. التصفية للحصول على الصف المطلوب
         filtered_data = [
             book for book in books_data 
             if book.get('grade') == target_grade
@@ -123,6 +132,7 @@ def get_current_links_from_js(js_url, target_grade):
         
     except json.JSONDecodeError as e:
         print(f"❌ فشل في تحليل بيانات JSON: {e}")
+        print(f"سطر الخطأ: {e.lineno}، العمود: {e.colno}")
         return []
     except Exception as e:
         print(f"❌ حدث خطأ غير متوقع: {e}")
@@ -132,7 +142,6 @@ def monitor_website():
     """المنطق الرئيسي لمقارنة الروابط وإرسال التنبيه."""
     print(f"جاري مراقبة: {URL_TO_MONITOR}")
 
-    # الحصول على البيانات المهيكلة الجديدة
     structured_data = get_current_links_from_js(JS_FILE_URL, TARGET_GRADE)
 
     if not structured_data:
@@ -140,20 +149,16 @@ def monitor_website():
         send_notification("❌ فشل البوت في الحصول على بيانات الصف الثاني الثانوي من ملف البيانات.", is_status=True)
         return
 
-    # استخراج قائمة الروابط فقط للمقارنة مع السجل
     current_links = {item['link'] for item in structured_data}
     old_links = load_history(HISTORY_FILE)
 
-    # حساب الروابط الجديدة
     new_links_urls = current_links - old_links
     
-    # تصفية البيانات المهيكلة للحصول على العناصر الجديدة فقط
     new_data = [item for item in structured_data if item['link'] in new_links_urls]
 
     if new_data:
         print(f"⚠️ تم العثور على {len(new_data)} ملف جديد للصف الثاني الثانوي!")
         send_notification(new_data)
-        # تحديث ملف السجل بعد إرسال التنبيه (نحفظ الروابط فقط)
         save_history(HISTORY_FILE, current_links)
     else:
         status_message = f"✅ *البوت يعمل بنجاح!* لا يوجد ملفات جديدة للصف الثاني الثانوي منذ الفحص الأخير."
