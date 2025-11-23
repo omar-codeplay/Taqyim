@@ -1,17 +1,14 @@
 name: Monitor MOE Files via Telegram
 
 on:
-  # يعمل الآن كل نصف ساعة (الدقيقة 0 والدقيقة 30 من كل ساعة)
+  # يعمل كل نصف ساعة (الدقيقة 0 والدقيقة 30 من كل ساعة)
   schedule:
-    - cron: '0 * * * *'   # تشغيل في الدقيقة 0 من كل ساعة
-    - cron: '30 * * * *'  # تشغيل في الدقيقة 30 من كل ساعة
-    
+    - cron: '0 * * * *'
+    - cron: '30 * * * *'
   # يسمح بالتشغيل اليدوي
   workflow_dispatch: 
 
 jobs:
-  # ... (بقية الكود تبقى كما هي)
-
   run_scraper:
     runs-on: ubuntu-latest
     steps:
@@ -27,14 +24,14 @@ jobs:
         run: pip install -r requirements.txt
         
       - name: Run Scraper Script
-        # تمرير التوكن فقط
+        # تمرير التوكن فقط (لم نعد بحاجة لـ Chat ID)
         run: python monitor.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         
-       - name: Commit history file
-        # الأهم: إصلاح خطوة حفظ ملف السجل
+      - name: Commit history file
+        # حفظ ملف السجل
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Automatic update: Update file history after scraping."
-          file_pattern: moe_files_history.txt  # 🚨 تم تغيير "files" إلى "file_pattern"
+          file_pattern: moe_files_history.txt # تم إصلاح المدخل من 'files' إلى 'file_pattern'
