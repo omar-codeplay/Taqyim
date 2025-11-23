@@ -4,27 +4,30 @@ import os
 import urllib.parse
 import time
 
-# --- الإعدادات العامة ---
+# --- الإعدادات العامة (يجب التأكد منها) ---
 URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/" 
 HISTORY_FILE = "moe_files_history.txt" 
-# الكلمة المفتاحية: جرب "pdf" أو "تحميل" أو "download". اختر الكلمة التي تميز ملفات الوزارة.
-LINK_KEYWORD = "pdf" 
+LINK_KEYWORD = "pdf" # الكلمة المفتاحية للبحث عن الملفات (يمكن تغييرها)
 
-# --- إعدادات Telegram (يتم قراءتها من GitHub Secrets) ---
+# --- إعدادات Telegram (يتم قراءة التوكن من GitHub Secrets) ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+# *** 🚨 هام: ضع هنا اسم المستخدم الخاص بك (@Username) ***
+TELEGRAM_RECEIVER_USERNAME = "@omar_codeplay" 
+# تأكد من أن البوت قد بدأ محادثة معك مرة واحدة على الأقل.
 
 def send_notification(new_links):
     """
-    إرسال التنبيهات إلى Telegram باستخدام Requests.
+    إرسال التنبيهات إلى Telegram باستخدام Requests واسم المستخدم.
     """
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("\n❌ فشل الإرسال: لم يتم إعداد Telegram Secrets بشكل صحيح.")
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_RECEIVER_USERNAME:
+        print("\n❌ فشل الإرسال: لم يتم إعداد Telegram Secrets أو اسم المستخدم بشكل صحيح.")
         return
 
     notification_message = "🎉 *تم العثور على ملفات جديدة في موقع الوزارة!* 🎉\n"
+    
     for link in new_links:
-        # تضمين اسم الملف في الرسالة
+        # محاولة استخلاص اسم الملف
         link_parts = link.split('/')
         file_name = link_parts[-1] if link_parts[-1] else link_parts[-2]
         notification_message += f"\n- *اسم الملف:* {file_name}\n- *الرابط:* {link}\n"
@@ -32,16 +35,17 @@ def send_notification(new_links):
     # تشفير الرسالة لتكون صالحة للاستخدام في رابط URL
     encoded_message = urllib.parse.quote_plus(notification_message)
     
-    # بناء رابط API
-    api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage?chat_id={TELEGRAM_CHAT_ID}&text={encoded_message}&parse_mode=Markdown"
+    # *** استخدام اسم المستخدم في خانة chat_id ***
+    api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage?chat_id={TELEGRAM_RECEIVER_USERNAME}&text={encoded_message}&parse_mode=Markdown"
     
     try:
         # إرسال الطلب
         response = requests.get(api_url, timeout=10)
         response.raise_for_status()
-        print("\n*** تم إرسال التنبيه إلى Telegram بنجاح! ***")
+        print("\n*** تم إرسال التنبيه إلى Telegram بنجاح عبر اسم المستخدم! ***")
     except requests.exceptions.RequestException as e:
         print(f"\n❌ فشل في إرسال رسالة Telegram. الخطأ: {e}")
+        print("تحقق: هل اسم المستخدم صحيح؟ وهل البوت بدأ محادثة معك؟")
 
 
 def get_current_links(url):
