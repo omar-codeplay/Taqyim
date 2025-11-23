@@ -1,13 +1,10 @@
-name: Monitor MOE Files
+name: Monitor MOE Files via Telegram
 
 on:
-  # هذا الجزء يحدد متى يتم تشغيل السيرفر.
+  # يعمل كل ساعة (في الدقيقة صفر من كل ساعة)
   schedule:
-    # يعمل كل ساعة (في الدقيقة صفر من كل ساعة)
-    # * * * * * هي تنسيق Cron Job
-    # يمكنك تعديلها لتصبح يومياً (0 8 * * *) أو حسب حاجتك
     - cron: '0 * * * *' 
-  # يسمح بتشغيل السيرفر يدوياً من واجهة GitHub
+  # يسمح بالتشغيل اليدوي من واجهة GitHub
   workflow_dispatch: 
 
 jobs:
@@ -15,27 +12,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        # يسحب الكود من المستودع إلى بيئة التشغيل
         uses: actions/checkout@v4
         
       - name: Set up Python
-        # يحدد نسخة بايثون التي سيتم استخدامها
         uses: actions/setup-python@v5
         with:
           python-version: '3.11' 
           
       - name: Install dependencies
-        # يثبت المكتبات من ملف requirements.txt
+        # تثبيت المكتبات من requirements.txt
         run: pip install -r requirements.txt
         
       - name: Run Scraper Script
-        # يقوم بتشغيل ملف monitor.py
+        # تشغيل البوت وتمرير مفاتيح Telegram السرية كمتغيرات بيئة
         run: python monitor.py
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         
       - name: Commit history file
-        # الأهم: يقوم بحفظ التغييرات على ملف السجل (moe_files_history.txt) 
-        # لضمان المقارنة في الجولة التالية.
+        # الأهم: حفظ ملف السجل (moe_files_history.txt) مرة أخرى إلى المستودع
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Automatic update: Update file history after scraping."
-          files: moe_files_history.txt # يحدد الملف الذي سيتم حفظه
+          files: moe_files_history.txt 
