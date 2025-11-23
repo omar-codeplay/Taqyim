@@ -28,18 +28,17 @@ def send_notification_chunk(chunk_data, total_new_count, chunk_index, total_chun
 
     message_text = ""
     if is_status:
+        # رسائل الفشل الحرجة فقط (فشل التحليل أو غير ذلك)
         message_text = chunk_data
     else:
-        # بناء الرسالة باستخدام تنسيق HTML
+        # بناء رسائل التنبيه العادية
         message_text = f"🚨 <b>تنبيه: تم العثور على {total_new_count} تقييماً جديداً للصف {TARGET_GRADE}!</b> 🚨\n"
         if total_chunks > 1:
             message_text += f"<i>(جزء {chunk_index} من {total_chunks})</i>\n\n"
         
         for item in chunk_data:
-            # صياغة اسم التقييم بدون الفصل الدراسي
+            # صياغة اسم التقييم بدون الفصل الدراسي والرابط
             name = f"({item['type']}) {item['subject']}" 
-            
-            # إرسال الاسم كنص عادي بدون رابط
             message_text += f"▪️ {name}\n"
 
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -60,23 +59,6 @@ def send_notification_chunk(chunk_data, total_new_count, chunk_index, total_chun
     except requests.exceptions.RequestException as e:
         print(f"❌ فشل في إرسال رسالة Telegram. الخطأ: {e}")
         return False
-
-
-def send_status_notification(message):
-    """ترسل رسالة حالة بسيطة."""
-    # (هذه الدالة لم تعد تُستخدم في حالة عدم وجود تغيير)
-    if not TELEGRAM_BOT_TOKEN: return
-    telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        'chat_id': TELEGRAM_CHAT_ID,
-        'text': message,
-        'parse_mode': 'HTML',
-        'disable_web_page_preview': True
-    }
-    try:
-        requests.post(telegram_url, data=payload)
-    except requests.exceptions.RequestException:
-        pass
 
 
 def load_history(filename):
@@ -134,9 +116,13 @@ def get_current_links_from_js(js_url, target_grade, target_type):
         return []
         
     except (SyntaxError, ValueError) as e:
+        # هنا سنرسل رسالة الفشل هذه لأنها مشكلة حرجة
+        send_notification_chunk(f"❌ فشل البوت في تحليل البيانات: {e}", 0, 0, 0, is_status=True)
         print(f"❌ فشل في تحليل بيانات JS/JSON: {e}")
         return []
     except Exception as e:
+        # هنا سنرسل رسالة الفشل هذه لأنها مشكلة حرجة
+        send_notification_chunk(f"❌ حدث خطأ غير متوقع: {e}", 0, 0, 0, is_status=True)
         print(f"❌ حدث خطأ غير متوقع: {e}")
         return []
 
@@ -144,11 +130,15 @@ def monitor_website():
     """المنطق الرئيسي لمقارنة الروابط وإرسال التنبيه."""
     print(f"جاري مراقبة: {URL_TO_MONITOR}")
 
+    # لاحظ أننا لم نعد نرسل رسالة الفشل إلا من داخل get_current_links_from_js في حالة حدوث خطأ حرج (SyntaxError/Exception)
     structured_data = get_current_links_from_js(JS_FILE_URL, TARGET_GRADE, TARGET_TYPE)
 
     if not structured_data:
+        # هنا لا نرسل أي رسالة، لأنها قد تكون حالة "لا يوجد بيانات تقييمات أصلاً"
         print("❌ فشل في الحصول على بيانات التقييمات. يرجى مراجعة سجل GitHub.")
-        send_notification_chunk("❌ فشل البوت في الحصول على بيانات التقييمات للصف الثاني الثانوي.", 0, 0, 0, is_status=True)
+        # نرسل رسالة حرجة فقط في حالة عدم وجود بيانات على الإطلاق
+        if not load_history(HISTORY_FILE):
+             send_notification_chunk("❌ فشل البوت في الحصول على بيانات التقييمات للصف الثاني الثانوي.", 0, 0, 0, is_status=True)
         return
 
     current_links = {item['link'] for item in structured_data}
@@ -179,9 +169,9 @@ def monitor_website():
         print("*** تم تحديث سجل الروابط بنجاح. ***")
         
     else:
+        # 🚨 في هذه الحالة، لا يتم إرسال أي رسالة إلى تيليجرام 🚨
         status_message = f"✅ <b>البوت يعمل بنجاح!</b> لا يوجد تقييمات جديدة للصف {TARGET_GRADE} منذ الفحص الأخير."
         print(status_message)
-        # send_status_notification(status_message) # 🚨 تعطيل إرسال رسالة الحالة 🚨
 
 
 if __name__ == "__main__":
