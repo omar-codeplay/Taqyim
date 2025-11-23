@@ -4,51 +4,48 @@ import os
 import urllib.parse
 import time
 
-# --- الإعدادات العامة (يجب التأكد منها) ---
-# في ملف monitor.py
-
-# ... (الإعدادات العامة)
+# --- الإعدادات العامة ---
 URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/" 
 HISTORY_FILE = "moe_files_history.txt" 
-# *** 🚨 غيّر هذه القيمة الآن 🚨 ***
 LINK_KEYWORD = "Secondary2" 
-# ... (بقية الكود)
-
 
 # --- إعدادات Telegram (يتم قراءة التوكن من GitHub Secrets) ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
-# *** 🚨 هام: ضع هنا اسم المستخدم الخاص بك (@Username) ***
 TELEGRAM_RECEIVER_USERNAME = "@omar_codeplay" 
-# تأكد من أن البوت قد بدأ محادثة معك مرة واحدة على الأقل.
+# تأكد من أن هذا هو اسم المستخدم الخاص بك (مع @)
 
-def send_notification(new_links):
+def send_notification(content, is_status=False):
     """
-    إرسال التنبيهات إلى Telegram باستخدام Requests واسم المستخدم.
+    إرسال التنبيهات أو رسالة الحالة إلى Telegram.
+    content يمكن أن يكون قائمة روابط أو نص رسالة الحالة.
     """
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_RECEIVER_USERNAME:
         print("\n❌ فشل الإرسال: لم يتم إعداد Telegram Secrets أو اسم المستخدم بشكل صحيح.")
         return
 
-    notification_message = "🎉 *تم العثور على ملفات جديدة في موقع الوزارة!* 🎉\n"
+    if is_status:
+        # إذا كانت رسالة حالة، استخدم النص مباشرة
+        notification_message = content
+    else:
+        # إذا كانت قائمة روابط جديدة
+        notification_message = "🎉 *تم العثور على ملفات جديدة في موقع الوزارة!* 🎉\n"
+        for link in content:
+            # محاولة استخلاص اسم الملف
+            link_parts = link.split('/')
+            file_name = link_parts[-1] if link_parts[-1] else link_parts[-2]
+            notification_message += f"\n- *اسم الملف:* {file_name}\n- *الرابط:* {link}\n"
     
-    for link in new_links:
-        # محاولة استخلاص اسم الملف
-        link_parts = link.split('/')
-        file_name = link_parts[-1] if link_parts[-1] else link_parts[-2]
-        notification_message += f"\n- *اسم الملف:* {file_name}\n- *الرابط:* {link}\n"
-    
-    # تشفير الرسالة لتكون صالحة للاستخدام في رابط URL
+    # تشفير الرسالة
     encoded_message = urllib.parse.quote_plus(notification_message)
     
-    # *** استخدام اسم المستخدم في خانة chat_id ***
+    # بناء رابط API
     api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage?chat_id={TELEGRAM_RECEIVER_USERNAME}&text={encoded_message}&parse_mode=Markdown"
     
     try:
         # إرسال الطلب
         response = requests.get(api_url, timeout=10)
         response.raise_for_status()
-        print("\n*** تم إرسال التنبيه إلى Telegram بنجاح عبر اسم المستخدم! ***")
+        print("\n*** تم إرسال التنبيه إلى Telegram بنجاح! ***")
     except requests.exceptions.RequestException as e:
         print(f"\n❌ فشل في إرسال رسالة Telegram. الخطأ: {e}")
         print("تحقق: هل اسم المستخدم صحيح؟ وهل البوت بدأ محادثة معك؟")
@@ -56,6 +53,7 @@ def send_notification(new_links):
 
 def get_current_links(url):
     """يزور الصفحة ويستخرج الروابط التي تطابق الكلمة المفتاحية."""
+    # ... (بقية الدالة كما هي)
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
     }
@@ -117,7 +115,10 @@ def monitor_website():
         print(f"⚠️ تم العثور على {len(new_links)} ملف جديد!")
         send_notification(new_links)
     else:
-        print("✅ لا يوجد ملفات جديدة تم العثور عليها منذ الفحص الأخير.")
+        # *** 💡 التعديل الجديد: إرسال رسالة حالة إذا لم يتم العثور على شيء ***
+        status_message = "✅ *البوت يعمل بنجاح!* لا يوجد ملفات جديدة للصف الثاني الثانوي منذ الفحص الأخير."
+        print(status_message)
+        send_notification(status_message, is_status=True)
 
     # حفظ القائمة الحالية للمقارنة التالية
     if current_links:
