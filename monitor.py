@@ -1,33 +1,27 @@
 import os
 import requests
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-import time
-
+import json
+import re 
 # =================================================================
 # الإعدادات العامة
 # =================================================================
-# ملاحظة: تم حذف LINK_KEYWORD لأننا سنعتمد على التصفية الآلية
-URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/"
-HISTORY_FILE = "moe_files_history.txt"
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = "@omar_codeplay"  # تأكد من أن هذا هو اسم المستخدم الصحيح لحسابك
+# الرابط الذي يحتوي على كل البيانات
+JS_FILE_URL = "https://ellibrary.moe.gov.eg/cha/scripts.js" 
+URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/" 
 
-# الكلمات التي سيتم البحث عنها واختيارها (مهمة لعمل Selenium)
-STAGE_NAME = "المرحلة الثانوية"
-GRADE_NAME = "الصف الثاني الثانوي"
+HISTORY_FILE = "moe_files_history.txt"
+# يجب إعداد هذا المتغير في إعدادات GitHub Secrets
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
+# يجب استبدال هذا بمعرّف قناتك/محادثتك
+TELEGRAM_CHAT_ID = "@omar_codeplay" 
+
+# معايير التصفية
+TARGET_GRADE = "الصف الثاني الثانوي"
 # =================================================================
 
 
 def send_notification(content, is_status=False):
-    """
-    يرسل تنبيه أو رسالة حالة إلى قناة/دردشة تيليجرام.
-    """
+    """يرسل تنبيه أو رسالة حالة إلى قناة/دردشة تيليجرام."""
     if not TELEGRAM_BOT_TOKEN:
         print("❌ فشل الإرسال: TELEGRAM_BOT_TOKEN غير متوفر.")
         return
@@ -36,14 +30,13 @@ def send_notification(content, is_status=False):
     if is_status:
         message_text = content
     else:
-        # بناء رسالة التنبيه بالملفات الجديدة
+        # بناء رسالة التنبيه بالملفات الجديدة (باستخدام الاسم والرابط)
         message_text = f"🚨 *تنبيه: تم العثور على {len(content)} ملف جديد للصف الثاني الثانوي!* 🚨\n\n"
-        for link in content:
-            # نستبدل .pdf وندع اسم الملف يظهر بشكل أنظف
-            name = link.split('/')[-1].replace('.pdf', '') 
+        for item in content:
+            name = f"({item['type']}) {item['subject']} - {item['term']}"
+            link = item['link']
             message_text += f"▪️ [{name}]({link})\n"
 
-    # تهيئة البيانات للإرسال
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
@@ -55,8 +48,6 @@ def send_notification(content, is_status=False):
     try:
         response = requests.post(telegram_url, data=payload)
         response.raise_for_status()
-        
-        # نستخدم الكود الآن للتأكد من وصول رسالة النجاح
         print("*** تم إرسال التنبيه إلى Telegram بنجاح! ***")
         return True
     except requests.exceptions.RequestException as e:
@@ -77,112 +68,82 @@ def save_history(filename, links):
         for link in sorted(list(links)):
             f.write(f"{link}\n")
 
-def get_current_links(url):
+def get_current_links_from_js(js_url, target_grade):
     """
-    يستخدم Selenium لمحاكاة اختيار المرحلة والسنة واستخراج الروابط.
+    يقوم بتنزيل ملف JS، يستخرج مصفوفة الكتب، ويقوم بالتصفية.
     """
-    print("🚀 بدء تشغيل المتصفح الخفي (Selenium)...")
-    
-    # إعداد خيارات Chrome للعمل بدون واجهة رسومية على GitHub Actions
-    options = webdriver.ChromeOptions()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    
-    # تثبيت وتشغيل ChromeDriver
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-    
+    print(f"📥 جاري تنزيل ملف البيانات من: {js_url}")
     try:
-        driver.get(url)
-        print(f"✅ تم فتح الصفحة بنجاح: {url}")
+        response = requests.get(js_url, timeout=15)
+        response.raise_for_status()
+        js_content = response.text
         
-        # ----------------------------------------------------
-        # 1. اختيار المرحلة (المرحلة الثانوية)
-        # ----------------------------------------------------
-        # البحث عن عنصر المرحلة الثانوية والضغط عليه
-        # نعتمد على أن الموقع يستخدم وسوم <a> أو <button> مع نص محدد
+        # 1. البحث عن مصفوفة الكتب في محتوى الملف
+        match = re.search(r'const\s+books\s*=\s*(\[[^;]*?\]);', js_content, re.DOTALL)
         
-        print(f"🔍 البحث عن زر اختيار المرحلة: {STAGE_NAME}")
-        
-        # نستخدم XPATH للبحث عن أي عنصر يحتوي على هذا النص
-        stage_xpath = f"//button[contains(text(), '{STAGE_NAME}')] | //a[contains(text(), '{STAGE_NAME}')]"
-        
-        # الانتظار حتى يصبح العنصر قابلاً للضغط
-        stage_element = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, stage_xpath))
-        )
-        stage_element.click()
-        print(f"✅ تم النقر على: {STAGE_NAME}")
-        
-        # الانتظار القصير لتحميل خيارات الصفوف
-        time.sleep(2) 
-        
-        # ----------------------------------------------------
-        # 2. اختيار الصف (الصف الثاني الثانوي)
-        # ----------------------------------------------------
-        print(f"🔍 البحث عن زر اختيار الصف: {GRADE_NAME}")
-        
-        # نستخدم XPATH للبحث عن العنصر الذي يحتوي على نص الصف
-        grade_xpath = f"//button[contains(text(), '{GRADE_NAME}')] | //a[contains(text(), '{GRADE_NAME}')]"
-        
-        # الانتظار حتى يصبح العنصر قابلاً للضغط
-        grade_element = WebDriverWait(driver, 15).until(
-            EC.element_to_be_clickable((By.XPATH, grade_xpath))
-        )
-        grade_element.click()
-        print(f"✅ تم النقر على: {GRADE_NAME}")
-        
-        # ----------------------------------------------------
-        # 3. استخراج الروابط بعد التصفية
-        # ----------------------------------------------------
-        
-        # الانتظار لثوانٍ حتى يتم تحميل الملفات عبر الجافاسكريبت
-        time.sleep(5) 
-        
-        # الآن نقوم بتحليل كود المصدر الذي تم تحميله
-        soup = BeautifulSoup(driver.page_source, 'html.parser')
-        
-        # نبحث عن جميع الروابط التي تنتهي بـ .pdf أو تبدأ باسم الملف
-        # هذا هو الكشط الفعلي بعد تحميل الصفحة بالكامل
-        links = set()
-        for a in soup.find_all('a', href=True):
-            href = a['href']
-            # نبحث عن روابط PDF كاملة المسار
-            if href.endswith('.pdf') and href.startswith('http'):
-                links.add(href)
-        
-        print(f"✅ تم العثور على {len(links)} رابط (PDF) بعد التصفية.")
-        return links
+        if not match:
+            print("❌ لم يتم العثور على متغير 'const books' في الملف.")
+            return []
 
+        # استخراج النص الذي يمثل المصفوفة (ويشمل القوسين المربعين)
+        json_text = match.group(1).strip()
+        
+        # 2. تنظيف وتحويل النص إلى JSON (التعامل مع تنسيق JS)
+        # استبدال single quotes بـ double quotes إذا لزم الأمر، وإزالة النصوص غير اللازمة
+        json_text = json_text.replace("'", '"').replace("subject:", '"subject":').replace("link:", '"link":') 
+        # حل مشكلة أسماء الخصائص التي تفتقد علامات التنصيص في كود JS
+        json_text = re.sub(r'(\w+):', r'"\1":', json_text)
+        
+        # تحويل النص النظيف إلى قائمة من القواميس
+        books_data = json.loads(json_text)
+        
+        # 3. التصفية للحصول على الصف المطلوب
+        filtered_data = [
+            book for book in books_data 
+            if book.get('grade') == target_grade
+        ]
+        
+        print(f"✅ تم استخراج {len(filtered_data)} ملفاً للصف {target_grade}.")
+        return filtered_data
+
+    except requests.exceptions.RequestException as e:
+        print(f"❌ فشل في تنزيل ملف JS. الخطأ: {e}")
+        return []
+        
+    except json.JSONDecodeError as e:
+        print(f"❌ فشل في تحليل بيانات JSON: {e}")
+        print("قد يكون هناك تنسيق غير صحيح في ملف JS.")
+        return []
     except Exception as e:
-        print(f"❌ حدث خطأ أثناء محاكاة المتصفح أو التصفية: {e}")
-        return set()
-        
-    finally:
-        driver.quit()
-        print("🛑 تم إغلاق المتصفح الخفي.")
-
+        print(f"❌ حدث خطأ غير متوقع: {e}")
+        return []
 
 def monitor_website():
     """المنطق الرئيسي لمقارنة الروابط وإرسال التنبيه."""
     print(f"جاري مراقبة: {URL_TO_MONITOR}")
-    
-    old_links = load_history(HISTORY_FILE)
-    current_links = get_current_links(URL_TO_MONITOR)
 
-    if not current_links:
-        print("❌ فشل في تحميل الروابط الديناميكية. يرجى مراجعة الخطوات في السجل.")
-        send_notification("❌ فشل البوت في تحميل الروابط الديناميكية بعد التصفية (الصف الثاني الثانوي). يرجى مراجعة سجل GitHub.", is_status=True)
+    # الحصول على البيانات المهيكلة الجديدة
+    structured_data = get_current_links_from_js(JS_FILE_URL, TARGET_GRADE)
+
+    if not structured_data:
+        print("❌ فشل في الحصول على بيانات الملفات. قد يكون هناك خطأ في الاتصال أو التنسيق.")
+        send_notification("❌ فشل البوت في الحصول على بيانات الصف الثاني الثانوي من ملف البيانات.", is_status=True)
         return
 
+    # استخراج قائمة الروابط فقط للمقارنة مع السجل
+    current_links = {item['link'] for item in structured_data}
+    old_links = load_history(HISTORY_FILE)
+
     # حساب الروابط الجديدة
-    new_links = current_links - old_links
+    new_links_urls = current_links - old_links
     
-    if new_links:
-        print(f"⚠️ تم العثور على {len(new_links)} ملف جديد للصف الثاني الثانوي!")
-        send_notification(new_links)
-        # تحديث ملف السجل بعد إرسال التنبيه
+    # تصفية البيانات المهيكلة للحصول على العناصر الجديدة فقط
+    new_data = [item for item in structured_data if item['link'] in new_links_urls]
+
+    if new_data:
+        print(f"⚠️ تم العثور على {len(new_data)} ملف جديد للصف الثاني الثانوي!")
+        send_notification(new_data)
+        # تحديث ملف السجل بعد إرسال التنبيه (نحفظ الروابط فقط)
         save_history(HISTORY_FILE, current_links)
     else:
         status_message = f"✅ *البوت يعمل بنجاح!* لا يوجد ملفات جديدة للصف الثاني الثانوي منذ الفحص الأخير."
