@@ -4,7 +4,7 @@ on:
   # يعمل كل ساعة (في الدقيقة صفر من كل ساعة)
   schedule:
     - cron: '0 * * * *' 
-  # يسمح بالتشغيل اليدوي من واجهة GitHub
+  # يسمح بالتشغيل اليدوي
   workflow_dispatch: 
 
 jobs:
@@ -20,18 +20,16 @@ jobs:
           python-version: '3.11' 
           
       - name: Install dependencies
-        # تثبيت المكتبات من requirements.txt
         run: pip install -r requirements.txt
         
       - name: Run Scraper Script
-        # تشغيل البوت وتمرير مفاتيح Telegram السرية كمتغيرات بيئة
+        # تمرير التوكن فقط
         run: python monitor.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         
       - name: Commit history file
-        # الأهم: حفظ ملف السجل (moe_files_history.txt) مرة أخرى إلى المستودع
+        # حفظ ملف السجل
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Automatic update: Update file history after scraping."
