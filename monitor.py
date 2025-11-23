@@ -1,7 +1,7 @@
 import os
 import requests
 import re
-import ast # 🚨 المكتبة المستخدمة حاليًا
+import ast 
 # =================================================================
 # الإعدادات العامة
 # =================================================================
@@ -26,17 +26,20 @@ def send_notification(content, is_status=False):
     if is_status:
         message_text = content
     else:
-        message_text = f"🚨 *تنبيه: تم العثور على {len(content)} ملف جديد للصف الثاني الثانوي!* 🚨\n\n"
+        # بناء الرسالة باستخدام تنسيق HTML
+        message_text = f"🚨 <b>تنبيه: تم العثور على {len(content)} ملف جديد للصف الثاني الثانوي!</b> 🚨\n\n"
         for item in content:
             name = f"({item['type']}) {item['subject']} - {item['term']}"
             link = item['link']
-            message_text += f"▪️ [{name}]({link})\n"
+            # استخدام تنسيق HTML للروابط: <a href="الرابط">الاسم</a>
+            message_text += f"▪️ <a href=\"{link}\">{name}</a>\n"
 
     telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         'chat_id': TELEGRAM_CHAT_ID,
         'text': message_text,
-        'parse_mode': 'Markdown',
+        # 🚨 التعديل الحاسم: استخدام HTML بدلاً من Markdown 🚨
+        'parse_mode': 'HTML', 
         'disable_web_page_preview': True
     }
 
@@ -44,6 +47,8 @@ def send_notification(content, is_status=False):
         response = requests.post(telegram_url, data=payload)
         if response.status_code != 200:
              print(f"❌ فشل في إرسال رسالة Telegram. رمز الحالة: {response.status_code}")
+             # طباعة محتوى الاستجابة لمزيد من التشخيص
+             print(f"استجابة تيليجرام: {response.text}")
              return False
 
         print("*** تم إرسال التنبيه إلى Telegram بنجاح! ***")
@@ -90,28 +95,24 @@ def get_current_links_from_js(js_url, target_grade):
 
         js_data_text = match.group(1).strip()
         
-        # 2. 🚨🚨 التعديل الحاسم لتنظيف البيانات لـ ast.literal_eval 🚨🚨
-        
-        # أ. إزالة جميع علامات الاقتباس المزدوجة والمفردة لتنظيف الروابط وقيمها أولاً
-        js_data_text = js_data_text.replace('"', '').replace("'", "")
-        
-        # ب. إزالة أي مسافات زائدة وفواصل أسطر جديدة
+        # 2. تنظيف البيانات لـ ast.literal_eval
         js_data_text = js_data_text.replace('\n', '').replace('\t', '')
         
-        # ج. التأكد من اقتباس المفاتيح وقيمها باستخدام علامات اقتباس مفردة (لمتطلبات ast.literal_eval)
-        # هذا Regex يبحث عن أي كلمة (key) يتبعها نقطتان، ويحيطها بعلامات اقتباس مفردة.
+        # إزالة جميع علامات الاقتباس المزدوجة والمفردة أولاً
+        js_data_text = js_data_text.replace('"', '').replace("'", "")
+        
+        # التأكد من اقتباس المفاتيح وقيمها باستخدام علامات اقتباس مفردة
         js_data_text = re.sub(r'([a-zA-Z0-9_]+)\s*:\s*([^,\[\]\{\}]+)', r"'\1': '\2'", js_data_text)
         
-        # د. إزالة الفواصل الزائدة في نهاية المصفوفة
+        # إزالة الفواصل الزائدة
         js_data_text = re.sub(r',\s*\]', ']', js_data_text)
-
+        
         # ----------------------------------------------------
         
-        # 3. التحليل باستخدام ast.literal_eval (يحل مشكلة التنسيق غير القياسي)
-        # نقوم بتحويل النص إلى مصفوفة بايثون (list of dicts)
+        # 3. التحليل باستخدام ast.literal_eval
         books_data = ast.literal_eval(js_data_text) 
         
-        # 4. التصفية للحصول على الصف المطلوب
+        # 4. التصفية
         filtered_data = [
             book for book in books_data 
             if book.get('grade') == target_grade
@@ -156,7 +157,8 @@ def monitor_website():
     else:
         status_message = f"✅ *البوت يعمل بنجاح!* لا يوجد ملفات جديدة للصف الثاني الثانوي منذ الفحص الأخير."
         print(status_message)
-        send_notification(status_message, is_status=True)
+        # إرسال رسالة حالة واحدة فقط يومياً أو عند الفشل
+        # send_notification(status_message, is_status=True)
 
 
 if __name__ == "__main__":
