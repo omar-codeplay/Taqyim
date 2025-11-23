@@ -11,18 +11,48 @@ HISTORY_FILE = "moe_files_history.txt"
 # كلمة مفتاحية شائعة للروابط في هذا الموقع هي "download" أو "pdf"
 LINK_KEYWORD = "pdf" 
 
+# أضف مكتبة urllib.parse لضمان تشفير الرسالة في الرابط
+import urllib.parse 
+# ... (باقي المكتبات: requests, BeautifulSoup, os, time) ...
+
+# --- الإعدادات (ستبقى نفسها) ---
+URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/" 
+HISTORY_FILE = "moe_files_history.txt" 
+LINK_KEYWORD = "pdf" 
+
+# --- إعدادات Telegram (مؤقتة) ---
+# ستستبدل هذه القيم بـ GitHub Secrets لاحقاً!
+TELEGRAM_BOT_TOKEN = "ضع_هنا_مفتاح_التوكن_الذي_أعطاك_إياه_BotFather" 
+TELEGRAM_CHAT_ID = "ضع_هنا_معرف_المحادثة_الذي_حصلت_عليه"
+
 def send_notification(new_links):
     """
-    هذه الدالة هي التي ترسل التنبيه الفعلي.
-    (يجب استبدال هذا بكود إرسال بريد إلكتروني/Telegram/Slack)
+    الدالة الجديدة لإرسال التنبيهات إلى Telegram.
     """
-    notification_message = "*** 🎉 تم العثور على ملفات جديدة في موقع الوزارة! 🎉 ***\n"
+    if not new_links:
+        return
+
+    notification_message = "🎉 *تم العثور على ملفات جديدة في موقع الوزارة!* 🎉\n"
     for link in new_links:
-        notification_message += f"- الرابط: {link}\n"
-        
-    print(notification_message)
-    # مثال على دمج كود تنبيه (يجب عليك كتابته):
-    # send_email("ملفات جديدة من موقع الوزارة", notification_message)
+        notification_message += f"• الرابط: {link}\n"
+    
+    # 1. تشفير الرسالة لتكون صالحة للاستخدام في رابط URL
+    encoded_message = urllib.parse.quote_plus(notification_message)
+    
+    # 2. بناء رابط API لإرسال الرسالة
+    api_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage?chat_id={TELEGRAM_CHAT_ID}&text={encoded_message}&parse_mode=Markdown"
+    
+    try:
+        # 3. إرسال الطلب
+        response = requests.get(api_url)
+        response.raise_for_status()
+        print("\n*** تم إرسال التنبيه إلى Telegram بنجاح! ***")
+    except requests.exceptions.RequestException as e:
+        print(f"\n❌ فشل في إرسال رسالة Telegram: {e}")
+        print("تأكد من صحة التوكن و Chat ID.")
+
+# ... (باقي الدوال: get_current_links, load_history, save_history, monitor_website) ...
+# ... (لا تحتاج لتغييرها) ...
 
 
 def get_current_links(url):
