@@ -32,9 +32,9 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         
-      - name: Commit history file
-        # حفظ ملف السجل
+       - name: Commit history file
+        # الأهم: إصلاح خطوة حفظ ملف السجل
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Automatic update: Update file history after scraping."
-          files: moe_files_history.txt 
+          file_pattern: moe_files_history.txt  # 🚨 تم تغيير "files" إلى "file_pattern"
