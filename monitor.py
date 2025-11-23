@@ -10,7 +10,7 @@ URL_TO_MONITOR = "https://ellibrary.moe.gov.eg/cha/"
 
 HISTORY_FILE = "moe_files_history.txt"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") 
-TELEGRAM_CHAT_ID = "@omar_codeplay" 
+TELEGRAM_CHAT_ID = "@taqyim_alerts" 
 
 # تصفية الملفات إلى 'تقييم' فقط
 TARGET_GRADE = "الصف الثاني الثانوي"
