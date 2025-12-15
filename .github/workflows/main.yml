@@ -1,36 +1,43 @@
-name: Run Scraper
+name: Auto Scraper & Uploader
 
 on:
-  push:
-    branches:
-      - main
   schedule:
-    # سيتم التشغيل كل 6 ساعات (يمكنك تغيير الوقت)
-    - cron: '*/30 * * * *' 
-  workflow_dispatch:
+    - cron: '0 */1 * * *'  # يعمل كل ساعة (يمكنك تعديلها)
+  workflow_dispatch:      # يسمح بالتشغيل اليدوي من زر Run
 
 jobs:
-  run-python-script:
+  run-script:
     runs-on: ubuntu-latest
+    
+    # الصلاحيات مهمة للسماح للبوت بحفظ ملف السجل وتحديث الكود
+    permissions:
+      contents: write
 
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.x' 
+        python-version: '3.9'
 
-    - name: Install dependencies
+    - name: Install Dependencies
       run: pip install -r requirements.txt
 
-    - name: Run Scraper Script
+    - name: Run Script
       env:
+        # هذه المتغيرات يجب إضافتها في إعدادات GitHub Secrets
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-      run: python monitor.py 
+        FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
+      run: python main.py
 
-    - name: Commit history file
-      uses: actions/upload-artifact@v4
-      with:
-        name: history
-        path: moe_files_history.txt
+    - name: Commit and Push History
+      # هذه الخطوة تحفظ ملف السجل history_log.txt لكي لا يتكرر النشر في المرة القادمة
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "actions@github.com"
+        git add history_log.txt
+        # الأمر التالي يتجنب الخطأ إذا لم يكن هناك تغييرات
+        git commit -m "Update history log [skip ci]" || echo "No changes to history"
+        git push
