@@ -3,32 +3,32 @@ import requests
 import re
 import ast
 import json
+import execjs # تم إضافة المكتبة هنا
 
 # =================================================================
 # التكوين والإعدادات
 # =================================================================
 # 1. إعدادات الموقع الوزاري
 JS_FILE_URL = "https://ellibrary.moe.gov.eg/cha/scripts.js"
-TARGET_TYPE_FILTER = "تقييم" # الكلمة المفتاحية لنوع الملف
+TARGET_TYPE_FILTER = "تقييم"
 
-# 2. إعدادات Firebase
-FIREBASE_URL = os.getenv("FIREBASE_URL") # سيتم جلبه من إسرار GitHub
-# مسارات التخزين حسب طلبك في الأكواد السابقة
-FIREBASE_PATH_G1 = "books"   # للصف الأول
-FIREBASE_PATH_G2 = "taq_it"  # للصف الثاني
+# 2. إعدادات Firebase (يتم جلبها من GitHub Secrets)
+FIREBASE_URL = os.getenv("FIREBASE_URL")
+FIREBASE_PATH_G1 = "books"   # للصف الأول الثانوي
+FIREBASE_PATH_G2 = "taq_it"  # للصف الثاني الثانوي
 
-# 3. إعدادات Telegram
+# 3. إعدادات Telegram (يتم جلب TELEGRAM_BOT_TOKEN من GitHub Secrets)
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = "@taqyim_alerts" # أو استبدله بالـ ID الرقمي
+TELEGRAM_CHAT_ID = "@taqyim_alerts"
 
 # 4. ملف السجل
 HISTORY_FILE = "history_log.txt"
 
 # =================================================================
-# خرائط المواد (Mapping) - تحويل اسم المادة إلى رقم (Type ID)
+# خرائط المواد (Mapping)
 # =================================================================
 
-# خريطة الصف الأول الثانوي (بناءً على كودك السابق)
+# خريطة الصف الأول الثانوي
 SUBJECT_MAP_G1 = {
     "اللغة العربية": "1",
     "اللغة الانجليزية لغة اولى": "2",
@@ -49,7 +49,7 @@ SUBJECT_MAP_G1 = {
     "الفلسفة والمنطق": "17"
 }
 
-# خريطة الصف الثاني الثانوي (بناءً على كودك السابق)
+# خريطة الصف الثاني الثانوي
 SUBJECT_MAP_G2 = {
     "اللغة العربية": "1",
     "اللغة الانجليزية لغة اولى": "2",
@@ -84,19 +84,25 @@ def load_history():
     """تحميل الروابط التي تمت معالجتها سابقاً."""
     if not os.path.exists(HISTORY_FILE):
         return set()
-    with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
-        return set(line.strip() for line in f if line.strip())
+    try:
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+            return set(line.strip() for line in f if line.strip())
+    except Exception as e:
+        print(f"❌ فشل تحميل ملف السجل: {e}")
+        return set()
 
 def save_history(new_links):
     """إضافة الروابط الجديدة إلى ملف السجل."""
-    with open(HISTORY_FILE, 'a', encoding='utf-8') as f: # 'a' for append
-        for link in new_links:
-            f.write(f"{link}\n")
+    try:
+        with open(HISTORY_FILE, 'a', encoding='utf-8') as f:
+            for link in new_links:
+                f.write(f"{link}\n")
+    except Exception as e:
+        print(f"❌ فشل حفظ ملف السجل: {e}")
 
 def fetch_moe_data():
     """
-    جلب وتحليل ملف JS من موقع الوزارة.
-    يعتمد على استخراج المصفوفة وتحويلها باستخدام ast.literal_eval لمرونته مع تنسيقات JS غير الصارمة.
+    جلب ملف JS وتنفيذ جزء JavaScript الذي يُعرّف مصفوفة 'books' لاستخراج البيانات بشكل موثوق.
     """
     print(f"📥 جاري جلب البيانات من المصدر: {JS_FILE_URL}")
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
@@ -104,57 +110,47 @@ def fetch_moe_data():
         response = requests.get(JS_FILE_URL, headers=headers, timeout=20)
         response.raise_for_status()
         
-        # 1. استخراج المصفوفة
-        match = re.search(r'const\s+books\s*=\s*(\[[^;]*?\]);', response.text, re.DOTALL)
+        js_code = response.text
+        
+        # 1. استخراج الكود المسؤول عن المصفوفة
+        match = re.search(r'const\s+books\s*=\s*(\[[^;]*?\]);', js_code, re.DOTALL)
         if not match:
             print("❌ لم يتم العثور على مصفوفة books في ملف JS.")
             return []
 
-        js_data_text = match.group(1).strip()
+        # 2. إنشاء سياق JavaScript وتنفيذ الكود
+        print("🔧 جاري تنفيذ كود JavaScript لاستخراج المصفوفة...")
         
-        # 2. تنظيف البيانات لـ ast.literal_eval (هو الأكثر تحملاً)
-        print("🔧 جاري محاولة تحليل البيانات باستخدام AST (التنظيف النهائي)...")
+        # نضيف جزء تعريف المصفوفة ثم نطبعها كـ JSON
+        # نستخدم JSON.stringify لتحويل الكائنات بشكل سليم إلى تنسيق JSON صالح
+        js_execution_code = match.group(0) + '\n' + 'return JSON.stringify(books);'
         
-        # إزالة فواصل الأسطر والمسافات
-        js_data_text = js_data_text.replace('\n', ' ').replace('\t', ' ')
+        ctx = execjs.compile(js_execution_code)
+        json_string = ctx.eval('JSON.stringify(books)')
         
-        # استبدال المفاتيح غير المقتبسة: 'key': 'value'
-        # نحولها إلى صيغة AST يمكن قراءتها: 'key': 'value'
-        # النمط: (بداية الكائن { أو بعد فاصلة ,) + (مسافات) + (اسم الخاصية) + (مسافات) + :
-        # سنحول جميع المفاتيح إلى علامات اقتباس مفردة لـ AST
-        js_data_text = re.sub(r'([{\s,])\s*([a-zA-Z0-9_]+)\s*:', r"\1'\2':", js_data_text)
-
-        # استبدال القيم المقتبسة بـ "quotes" مزدوجة إلى مفردة (لتوحيد الصيغة لـ AST)
-        js_data_text = js_data_text.replace('"', "'")
-        
-        # إزالة الفواصل الزائدة
-        js_data_text = re.sub(r',\s*\]', ']', js_data_text)
-        js_data_text = re.sub(r',\s*\}', '}', js_data_text)
-        
-        # 3. التحويل باستخدام ast.literal_eval
-        # (هذه هي الطريقة الأكثر موثوقية في تحليل البيانات التي تشبه قاموس بايثون/JS)
-        data = ast.literal_eval(js_data_text)
-        print("✅ نجاح تحليل البيانات.")
+        # 3. تحليل سلسلة JSON بواسطة Python
+        data = json.loads(json_string)
+        print("✅ نجاح تحليل البيانات عبر تنفيذ JS.")
         return data
 
     except requests.exceptions.RequestException as e:
         print(f"❌ خطأ في الاتصال أو التحميل: {e}")
         return []
+    except execjs.ProgramError as e:
+        print(f"❌ خطأ في تنفيذ كود JavaScript: {e}")
+        print(">>> تأكد من تثبيت بيئة تشغيل JS مثل Node.js (عبر الأمر: npm install -g nodejs).")
+        return []
     except Exception as e:
-        # هنا سنصطاد JSONDecodeError, SyntaxError, و ValueError
-        print(f"❌ فشل التحليل النهائي بعد التنظيف: {e}")
+        print(f"❌ فشل التحليل النهائي بعد التنفيذ: {e}")
         return []
 
-
-
-
 def parse_week(type_str):
-    """استخراج رقم الأسبوع من النص."""
+    """استخراج رقم الأسبوع من النص مثل '(13) تقييمات الاسبوع...'."""
     match = re.search(r'\((\d+)\)', str(type_str))
     return match.group(1) if match else "0"
 
 def process_items(all_data, history_set):
-    """معالجة البيانات وتجهيز القوائم الجديدة."""
+    """معالجة البيانات وتجهيز القوائم الجديدة حسب الصف ونوع التقييم."""
     new_items_g1 = []
     new_items_g2 = []
     
@@ -162,7 +158,7 @@ def process_items(all_data, history_set):
         link = item.get('link')
         grade = item.get('grade')
         subject = item.get('subject', '').strip()
-        raw_type = item.get('type') # هذا يحتوي على النص مثل "(13) تقييمات..."
+        raw_type = item.get('type') 
         
         # 1. تصفية: هل هو "تقييم"؟
         if TARGET_TYPE_FILTER not in str(raw_type):
@@ -196,14 +192,13 @@ def process_items(all_data, history_set):
     return new_items_g1, new_items_g2
 
 def upload_batch_firebase(items, node_path):
-    """رفع قائمة عناصر إلى Firebase."""
+    """رفع قائمة عناصر إلى Firebase Realtime Database."""
     if not items or not FIREBASE_URL:
         return
     
     print(f"🚀 جاري رفع {len(items)} عنصر إلى المسار: {node_path}...")
     
     for item in items:
-        # المفتاح: Type_Week
         key = f"{item['type']}_{item['week']}"
         url = f"{FIREBASE_URL}/{node_path}/{key}.json"
         
@@ -215,16 +210,16 @@ def upload_batch_firebase(items, node_path):
         }
         
         try:
-            resp = requests.put(url, json=payload)
+            resp = requests.put(url, json=payload, timeout=10)
             if resp.status_code == 200:
-                print(f"✅ تم الرفع: {item['name']} (Week {item['week']})")
+                print(f"✅ تم الرفع: {item['name']} (W{item['week']})")
             else:
-                print(f"❌ فشل الرفع: {resp.text}")
+                print(f"❌ فشل الرفع ({resp.status_code}): {item['name']}")
         except Exception as e:
-            print(f"❌ خطأ اتصال بـ Firebase: {e}")
+            print(f"❌ خطأ اتصال بـ Firebase لـ {item['name']}: {e}")
 
 def send_telegram_alert(items_g1, items_g2):
-    """إرسال إشعار مجمع لتيليجرام."""
+    """إرسال إشعار مجمع لتيليجرام بالملفات الجديدة."""
     if not TELEGRAM_BOT_TOKEN:
         print("⚠️ لم يتم تعيين توكن تيليجرام.")
         return
@@ -233,12 +228,13 @@ def send_telegram_alert(items_g1, items_g2):
     if not all_new:
         return
 
-    # تقسيم الرسائل لتجنب الحد الأقصى
     chunk_size = 20
     chunks = [all_new[i:i + chunk_size] for i in range(0, len(all_new), chunk_size)]
 
+    total_new = len(all_new)
+    
     for idx, chunk in enumerate(chunks):
-        msg = f"🚨 <b>تنبيه: تم إضافة {len(all_new)} تقييم جديد!</b>\n"
+        msg = f"🚨 <b>تنبيه: تم إضافة {total_new} تقييم جديد!</b> 🚨\n"
         if len(chunks) > 1:
             msg += f"<i>(الجزء {idx+1} من {len(chunks)})</i>\n"
         msg += "\n"
@@ -254,14 +250,16 @@ def send_telegram_alert(items_g1, items_g2):
                 'text': msg,
                 'parse_mode': 'HTML',
                 'disable_web_page_preview': True
-            })
+            }, timeout=10)
         except Exception as e:
-            print(f"❌ فشل إرسال تيليجرام: {e}")
+            print(f"❌ فشل إرسال تيليجرام (الدفعة {idx+1}): {e}")
 
 # =================================================================
 # التشغيل الرئيسي
 # =================================================================
 def main():
+    print("--- بدء مهمة فحص التقييمات ---")
+    
     # 1. تحميل السجل القديم
     history = load_history()
     print(f"📂 تم تحميل {len(history)} رابط من السجل.")
@@ -269,6 +267,7 @@ def main():
     # 2. جلب البيانات
     raw_data = fetch_moe_data()
     if not raw_data:
+        print("🛑 فشل جلب البيانات الخام أو تحليلها.")
         return
 
     # 3. المعالجة والفرز (الجديد فقط)
@@ -283,15 +282,14 @@ def main():
 
     # 4. الرفع لقاعدة البيانات
     if new_g1:
-        upload_batch_firebase(new_g1, FIREBASE_PATH_G1) # يرفع إلى /books
+        upload_batch_firebase(new_g1, FIREBASE_PATH_G1)
     if new_g2:
-        upload_batch_firebase(new_g2, FIREBASE_PATH_G2) # يرفع إلى /taq_it
+        upload_batch_firebase(new_g2, FIREBASE_PATH_G2)
 
     # 5. إرسال الإشعارات
     send_telegram_alert(new_g1, new_g2)
 
     # 6. تحديث السجل
-    # نجمع روابط الصفين معاً للحفظ
     links_to_save = [i['url'] for i in new_g1] + [i['url'] for i in new_g2]
     save_history(links_to_save)
     print("💾 تم تحديث ملف السجل.")
