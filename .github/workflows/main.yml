@@ -2,16 +2,16 @@ name: Auto Scraper & Uploader
 
 on:
   schedule:
-    - cron: '0 */1 * * *'  # يعمل كل ساعة (يمكنك تعديلها)
+    # يعمل كل ساعة - يمكنك تعديل الوقت
+    - cron: '0 * * * *'  
   workflow_dispatch:      # يسمح بالتشغيل اليدوي من زر Run
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
     
-    # الصلاحيات مهمة للسماح للبوت بحفظ ملف السجل وتحديث الكود
     permissions:
-      contents: write
+      contents: write # ضروري للسماح بحفظ ملف السجل
 
     steps:
     - name: Checkout code
@@ -27,17 +27,20 @@ jobs:
 
     - name: Run Script
       env:
-        # هذه المتغيرات يجب إضافتها في إعدادات GitHub Secrets
+        # المتغيرات السرية يجب إضافتها في GitHub Secrets
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         FIREBASE_URL: ${{ secrets.FIREBASE_URL }}
       run: python main.py
 
     - name: Commit and Push History
-      # هذه الخطوة تحفظ ملف السجل history_log.txt لكي لا يتكرر النشر في المرة القادمة
       run: |
         git config --global user.name "GitHub Actions Bot"
         git config --global user.email "actions@github.com"
+        
+        # إنشاء ملف السجل إذا لم يكن موجوداً لتجنب خطأ "fatal: pathspec"
+        touch history_log.txt
+        
         git add history_log.txt
-        # الأمر التالي يتجنب الخطأ إذا لم يكن هناك تغييرات
+        # الأمر التالي يتجنب الخطأ إذا لم يكن هناك تغييرات لحفظها
         git commit -m "Update history log [skip ci]" || echo "No changes to history"
         git push
