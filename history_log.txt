@@ -548,3 +548,17 @@ https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/
 https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/psychology_sociology_ARABIC_Sec2_TR1_W15.pdf
 https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/Deutsch_language_Secondary2_TR1_W15.pdf
 https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/Italiano_language_Secondary2_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry1/Term1/ClassrHomeAssessmentsTest/Math_ARABIC_Sec1_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry1/Term1/ClassrHomeAssessmentsTest/Math_English_Sec1_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry1/Term1/ClassrHomeAssessmentsTest/Integrated_science_ARABIC_Sec1_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry1/Term1/ClassrHomeAssessmentsTest/Integrated_science_ENGLISH_Sec1_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry1/Term1/ClassrHomeAssessmentsTest/Espanol_language_Secondary1_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/PHYSICS_Arabic_Sec2_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/PHYSICS_English_Sec2_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/Pure_Mathematics_ARABIC_Sec2_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/Pure_Mathematics_English_Sec2_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/General_Mathematics_ARABIC_Sec2_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/General_Mathematics_ENGLISH_Sec2_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/Mathematics_Applications_ARABIC_Sec2_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/Mathematics_Applications_English_Sec2_TR1_W15.pdf
+https://elearnningcontent.blob.core.windows.net/elearnningcontent/2026/Secondry/Secondry2/Term1/ClassrHomeAssessmentsTest/Espanol_language_Secondary2_TR1_W15.pdf
