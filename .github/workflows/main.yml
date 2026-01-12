@@ -1,14 +1,14 @@
-name: Auto Scraper & Uploader
+# name: Auto Scraper & Uploader
 
-on:
-  schedule:
+# on:
+#  schedule:
     # يعمل كل ساعة - يمكنك تعديل الوقت
-    - cron: '0 * * * *'  
-  workflow_dispatch:      # يسمح بالتشغيل اليدوي من زر Run
+#    - cron: '0 * * * *'  
+#  workflow_dispatch:      # يسمح بالتشغيل اليدوي من زر Run
 
-jobs:
-  run-script:
-    runs-on: ubuntu-latest
+# jobs:
+#  run-script:
+#    runs-on: ubuntu-latest
     
     permissions:
       contents: write # ضروري للسماح بحفظ ملف السجل
